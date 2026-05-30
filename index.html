@@ -208,11 +208,6 @@
         else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
         return;
       }
-      try {
-        if (window.Telegram?.WebApp?.requestFullscreen) {
-          await Telegram.WebApp.requestFullscreen(); return;
-        }
-      } catch(e) {}
       // Android: нативный video fullscreen — масштаб по высоте
       if (isAndroid() && video.requestFullscreen) { await video.requestFullscreen(); return; }
       const el = videoContainer;
