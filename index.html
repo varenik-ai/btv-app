@@ -41,6 +41,10 @@
   if (window.Telegram?.WebApp) {
     Telegram.WebApp.ready();
     Telegram.WebApp.expand();
+    // Полноэкранный режим при старте — скрывает URL
+    if (Telegram.WebApp.requestFullscreen) {
+      try { Telegram.WebApp.requestFullscreen(); } catch(e) {}
+    }
   }
 
   const T = {
