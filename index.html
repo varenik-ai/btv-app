@@ -64,6 +64,18 @@
   }
 
   const lang = getLang();
+
+  // ===== Analytics =====
+  function logEvent(event) {
+    const device = isIOS() ? 'ios' : isAndroid() ? 'android' : 'desktop';
+    const lang = getLang();
+    fetch('https://btv-proxy.vercel.app/api/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel: 'bTV', event, device, lang })
+    }).catch(() => {});
+  }
+
   const t = T[lang] || T.en;
   document.documentElement.lang = lang;
 
@@ -239,6 +251,7 @@
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         setStatus('live');
+        logEvent('stream_start');
         video.play().then(() => {
           unmuteBtn.style.display = 'block';
           setupMediaSession();
@@ -250,6 +263,7 @@
         if (data.fatal && !isReconnecting) {
           isReconnecting = true;
           setStatus('errorStream', true);
+          logEvent('stream_error');
           cleanUp();
           reconnectTimer = setTimeout(() => {
             isReconnecting = false;
@@ -270,6 +284,7 @@
 
   // fix #2: тихое обновление токена без перезапуска плеера
   async function refreshToken() {
+    logEvent('token_refresh');
     try {
       const r = await fetch(STREAM_API + '?t=' + Date.now());
       const d = await r.json();
