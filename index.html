@@ -24,53 +24,6 @@
     #fullscreen-btn { background: #1a1a2e; border: 1px solid #444; display: block; }
     #video-container:fullscreen, #video-container:-webkit-full-screen, #video-container.is-fullscreen { width: 100vw !important; height: 100vh !important; max-width: none !important; border-radius: 0 !important; display: flex !important; align-items: center !important; justify-content: center !important; background: #000 !important; position: fixed !important; top: 0 !important; left: 0 !important; z-index: 9999 !important; }
     #video-container:fullscreen video, #video-container:-webkit-full-screen video, #video-container.is-fullscreen video { width: auto !important; height: 100vh !important; max-width: 100vw !important; max-height: 100vh !important; object-fit: contain !important; margin: auto !important; }
-
-    #video-container.is-fullscreen {
-      position: fixed !important;
-      top: 0 !important; left: 0 !important;
-      width: 100vw !important; height: 100vh !important;
-      max-width: none !important;
-      border-radius: 0 !important;
-      z-index: 99999 !important;
-      background: #000 !important;
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-    }
-    #video-container.is-fullscreen video {
-      width: auto !important;
-      height: 100vh !important;
-      max-width: 100vw !important;
-      object-fit: contain !important;
-    }
-
-    body.is-fullscreen-mode {
-      position: fixed !important;
-      top: 0 !important; left: 0 !important;
-      width: 100vw !important; height: 100vh !important;
-      overflow: hidden !important;
-      padding: 0 !important;
-    }
-    body.is-fullscreen-mode .logo,
-    body.is-fullscreen-mode #status,
-    body.is-fullscreen-mode #reload-btn,
-    body.is-fullscreen-mode #unmute-btn,
-    body.is-fullscreen-mode #fullscreen-btn {
-      display: none !important;
-    }
-    body.is-fullscreen-mode #video-container {
-      position: fixed !important;
-      top: 0 !important; left: 0 !important;
-      width: 100vw !important; height: 100vh !important;
-      max-width: none !important;
-      border-radius: 0 !important;
-      z-index: 99999 !important;
-    }
-    body.is-fullscreen-mode #video-container video {
-      width: 100vw !important;
-      height: 100vh !important;
-      object-fit: contain !important;
-    }
   </style>
 </head>
 <body>
@@ -88,12 +41,6 @@
   if (window.Telegram?.WebApp) {
     Telegram.WebApp.ready();
     Telegram.WebApp.expand();
-  }
-    } catch(e) {}
-    // Полноэкранный режим при старте — скрывает URL
-    if (Telegram.WebApp.requestFullscreen) {
-      try { Telegram.WebApp.requestFullscreen(); } catch(e) {}
-    }
   }
 
   const T = {
@@ -117,18 +64,6 @@
   }
 
   const lang = getLang();
-
-  // ===== Analytics =====
-  function logEvent(event) {
-    const device = isIOS() ? 'ios' : isAndroid() ? 'android' : 'desktop';
-    const lang = getLang();
-    fetch('https://btv-proxy.vercel.app/api/log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channel: 'bTV', event, device, lang })
-    }).catch(() => {});
-  }
-
   const t = T[lang] || T.en;
   document.documentElement.lang = lang;
 
@@ -250,18 +185,25 @@
   });
 
   // ── Fullscreen ───────────────────────────────────────────────────────────
-  function openFullscreen() {
-    const isFs = document.body.classList.contains('is-fullscreen-mode');
-    if (isFs) {
-      document.body.classList.remove('is-fullscreen-mode');
-      // Показываем кнопки обратно
-      document.getElementById('fullscreen-btn').style.display = 'block';
-      document.getElementById('unmute-btn').style.display = video.muted ? 'block' : 'none';
-      try { if (window.Telegram?.WebApp?.exitFullscreen) Telegram.WebApp.exitFullscreen(); } catch(e) {}
-    } else {
-      document.body.classList.add('is-fullscreen-mode');
-      try { if (window.Telegram?.WebApp?.requestFullscreen) Telegram.WebApp.requestFullscreen(); } catch(e) {}
-    }
+  async function openFullscreen() {
+    try {
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        if (document.exitFullscreen) await document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        return;
+      }
+      try {
+        if (window.Telegram?.WebApp?.requestFullscreen) {
+          await Telegram.WebApp.requestFullscreen(); return;
+        }
+      } catch(e) {}
+      // Android: нативный video fullscreen — масштаб по высоте
+      if (isAndroid() && video.requestFullscreen) { await video.requestFullscreen(); return; }
+      const el = videoContainer;
+      if (el.requestFullscreen)       { await el.requestFullscreen(); return; }
+      if (el.webkitRequestFullscreen) { el.webkitRequestFullscreen(); return; }
+      if (video.webkitEnterFullscreen)  video.webkitEnterFullscreen();
+    } catch(e) {}
   }
 
   // ── Stream ───────────────────────────────────────────────────────────────
@@ -296,9 +238,7 @@
       hls.loadSource(proxiedUrl);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        logEvent('stream_start');
         setStatus('live');
-        logEvent('stream_start');
         video.play().then(() => {
           unmuteBtn.style.display = 'block';
           setupMediaSession();
@@ -310,7 +250,6 @@
         if (data.fatal && !isReconnecting) {
           isReconnecting = true;
           setStatus('errorStream', true);
-          logEvent('stream_error');
           cleanUp();
           reconnectTimer = setTimeout(() => {
             isReconnecting = false;
@@ -331,7 +270,6 @@
 
   // fix #2: тихое обновление токена без перезапуска плеера
   async function refreshToken() {
-    logEvent('token_refresh');
     try {
       const r = await fetch(STREAM_API + '?t=' + Date.now());
       const d = await r.json();
